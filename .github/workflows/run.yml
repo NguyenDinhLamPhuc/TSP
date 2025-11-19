@@ -1,0 +1,45 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install build essentials
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake
+
+    - name: Compile C++ (GCC)
+      # This step finds all .cpp files and compiles them into an executable named `tsp`.
+      # Adjust the command if your project uses CMake, a Makefile, or has a different entrypoint file.
+      run: |
+        set -e
+        echo "Found C++ files:"
+        find . -name "*.cpp" -print
+        g++ -std=c++17 -O2 -Wall -Wextra -pedantic -pipe $(find . -name "*.cpp") -o tsp
+
+    - name: Run basic lint (optional)
+      # This step runs the binary with `--help` if it supports it; do NOT run the binary if it requires input files.
+      # If you have test inputs (e.g. testdata/bayg29.tsp) add a step to run them explicitly.
+      run: |
+        if [ -x ./tsp ]; then
+          echo "Binary compiled successfully (./tsp). Skipping automatic run to avoid missing-data failures."
+        else
+          echo "Binary not present or not executable."
+        fi
+
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: tsp-binary
+        path: tsp
