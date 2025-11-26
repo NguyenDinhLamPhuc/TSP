@@ -63,127 +63,315 @@ void read_tsp(const string &filename, vector<vector<double>> &dist, int &n) {
         exit(1);
     }
 
+    // đọc toàn bộ file vào vector dòng để xử lý linh hoạt các section
+    vector<string> lines;
     string line;
-    bool found_edge_section = false;
-    string edge_format = "UPPER_ROW"; // mặc định cũ nếu không khai báo
+    while (getline(fin, line)) lines.push_back(line);
+    fin.close();
 
-    // Đọc các thông tin header
-    while (getline(fin, line)) {
-        string up = line;
-        // chuyển về chữ hoa để so sánh không phân biệt hoa thường
-        transform(up.begin(), up.end(), up.begin(), ::toupper);
+    auto up = [&](string s){ transform(s.begin(), s.end(), s.begin(), ::toupper); return s; };
+    auto trim = [&](string s){
+        auto a = s.find_first_not_of(" \t\r\n");
+        if (a==string::npos) return string();
+        auto b = s.find_last_not_of(" \t\r\n");
+        return s.substr(a, b-a+1);
+    };
 
-        if (up.find("DIMENSION") != string::npos) {
-            auto pos = line.find(":");
-            if (pos != string::npos) {
-                string tmp = line.substr(pos + 1);
-                n = stoi(tmp);
-            } else {
-                // nếu không có ":", có thể token thứ 2 là số
-                stringstream ss(line);
-                string token;
-                ss >> token; // DIMENSION
-                ss >> token; // số
-                n = stoi(token);
-            }
-        } else if (up.find("EDGE_WEIGHT_FORMAT") != string::npos) {
-            auto pos = line.find(":");
-            string val;
-            if (pos != string::npos) val = line.substr(pos + 1);
+    // header fields mặc định
+    string edge_weight_type = "EXPLICIT";
+    string edge_weight_format = "";
+    string display_data_type = "";
+    int dimension = -1;
+
+    int L = lines.size();
+    int edge_section_line = -1, nodecoord_line = -1, display_line = -1;
+    for (int i = 0; i < L; ++i) {
+        string s = up(lines[i]);
+        if (s.find("DIMENSION") != string::npos) {
+            auto pos = lines[i].find(':');
+            if (pos != string::npos) dimension = stoi(trim(lines[i].substr(pos+1)));
             else {
-                stringstream ss(line);
-                string t;
-                ss >> t; // EDGE_WEIGHT_FORMAT
-                ss >> t; // value
-                val = t;
+                stringstream ss(lines[i]);
+                string tok; ss >> tok; ss >> tok;
+                dimension = stoi(tok);
             }
-            // trim
-            auto start = val.find_first_not_of(" \t");
-            auto end = val.find_last_not_of(" \t");
-            if (start != string::npos) val = val.substr(start, end - start + 1);
-            // chuyển về chữ hoa
-            transform(val.begin(), val.end(), val.begin(), ::toupper);
-            edge_format = val;
-        } else if (up.find("EDGE_WEIGHT_SECTION") != string::npos) {
-            found_edge_section = true;
-            break;
         }
+        else if (s.find("EDGE_WEIGHT_TYPE") != string::npos) {
+            auto pos = lines[i].find(':');
+            string val = (pos==string::npos? lines[i] : lines[i].substr(pos+1));
+            edge_weight_type = up(trim(val));
+        }
+        else if (s.find("EDGE_WEIGHT_FORMAT") != string::npos) {
+            auto pos = lines[i].find(':');
+            string val = (pos==string::npos? lines[i] : lines[i].substr(pos+1));
+            edge_weight_format = up(trim(val));
+        }
+        else if (s.find("DISPLAY_DATA_TYPE") != string::npos) {
+            auto pos = lines[i].find(':');
+            string val = (pos==string::npos? lines[i] : lines[i].substr(pos+1));
+            display_data_type = up(trim(val));
+        }
+        else if (s.find("EDGE_WEIGHT_SECTION") != string::npos) edge_section_line = i;
+        else if (s.find("NODE_COORD_SECTION") != string::npos) nodecoord_line = i;
+        else if (s.find("DISPLAY_DATA_SECTION") != string::npos) display_line = i;
     }
 
-    if (!found_edge_section) {
-        cerr << "Không tìm thấy EDGE_WEIGHT_SECTION trong file!\n";
+    if (dimension <= 0) {
+        cerr << "Không xác định DIMENSION trong file\n";
         exit(1);
     }
+    n = dimension;
+    dist.assign(n, vector<double>(n, 0.0));
 
-    dist.assign(n, vector<double>(n, 0));
-    vector<double> values;
-    double val;
-    while (fin >> val) {
-        values.push_back(val);
+    // helper: parse tokens (số) từ dòng d tới d + nhiều
+    auto collect_numbers_from = [&](int start_line, long needed) {
+        vector<double> vals;
+        for (int i = start_line; i < L && (long)vals.size() < needed; ++i) {
+            stringstream ss(lines[i]);
+            double v;
+            while (ss >> v) {
+                vals.push_back(v);
+                if ((long)vals.size() >= needed) break;
+            }
+        }
+        return vals;
+    };
+
+    // nếu có NODE_COORD_SECTION hoặc DISPLAY_DATA_SECTION và EDGE_WEIGHT_TYPE == EUC_2D (hoặc kiểu tọa độ khác)
+    if ((edge_weight_type.find("EUC_2D") != string::npos || edge_weight_type.find("EUC2D") != string::npos)
+        && (nodecoord_line != -1 || display_line != -1)) {
+        // lấy tọa độ từ NODE_COORD_SECTION ưu tiên, nếu không có dùng DISPLAY_DATA_SECTION
+        int start = (nodecoord_line != -1 ? nodecoord_line + 1 : display_line + 1);
+        vector<pair<double,double>> coord(n, {0,0});
+        int idx = 0;
+        for (int i = start; i < L && idx < n; ++i) {
+            string s = trim(lines[i]);
+            if (s.empty()) continue;
+            stringstream ss(s);
+            int id;
+            double x, y;
+            if (!(ss >> id >> x >> y)) {
+                // một số file dùng định dạng "index: x y" hoặc "index x y" - cố gắng bắt số cuối hai số
+                vector<double> toks;
+                double t;
+                stringstream ss2(s);
+                while (ss2 >> t) toks.push_back(t);
+                if (toks.size() >= 2) {
+                    x = toks[toks.size()-2];
+                    y = toks[toks.size()-1];
+                    id = idx+1;
+                } else continue;
+            }
+            if (id >= 1 && id <= n) coord[id-1] = {x,y};
+            else coord[idx] = {x,y};
+            idx++;
+        }
+        // tính khoảng cách Euclid (làm tròn theo TSPLIB)
+        for (int i = 0; i < n; ++i) {
+            for (int j = 0; j < n; ++j) {
+                if (i==j) { dist[i][j] = 0; continue; }
+                double dx = coord[i].first - coord[j].first;
+                double dy = coord[i].second - coord[j].second;
+                double d = sqrt(dx*dx + dy*dy);
+                dist[i][j] = floor(d + 0.5);
+            }
+        }
+        return;
     }
 
-    int idx = 0;
-    if (edge_format == "LOWER_DIAG_ROW" || edge_format == "LOWER_DIAG_ROW.") {
-        // đọc tam giác dưới có đường chéo: hàng i chứa j = 0..i
-        for (int i = 0; i < n; i++) {
-            for (int j = 0; j <= i; j++) {
-                if (idx >= (int)values.size()) {
-                    cerr << "Dữ liệu không đủ cho LOWER_DIAG_ROW\n";
-                    exit(1);
-                }
-                dist[i][j] = values[idx++];
-                dist[j][i] = dist[i][j];
+    // hỗ trợ GEO nếu có NODE_COORD_SECTION
+    if (edge_weight_type.find("GEO") != string::npos && nodecoord_line != -1) {
+        int start = nodecoord_line + 1;
+        vector<pair<double,double>> coord(n, {0,0});
+        int idx = 0;
+        for (int i = start; i < L && idx < n; ++i) {
+            string s = trim(lines[i]);
+            if (s.empty()) continue;
+            stringstream ss(s);
+            int id; double x, y;
+            if (!(ss >> id >> x >> y)) {
+                vector<double> toks; double t; stringstream ss2(s);
+                while (ss2 >> t) toks.push_back(t);
+                if (toks.size() >= 2) { x = toks[toks.size()-2]; y = toks[toks.size()-1]; id = idx+1; }
+                else continue;
+            }
+            if (id >= 1 && id <= n) coord[id-1] = {x,y};
+            else coord[idx] = {x,y};
+            idx++;
+        }
+        auto to_rad_geo = [&](double v)->double{
+            int deg = (int)floor(v);
+            double min = v - deg;
+            // theo định nghĩa TSPLIB: chuyển minutes với factor 5/3 trước khi đổi sang rad
+            return M_PI * (deg + 5.0 * min / 3.0) / 180.0;
+        };
+        vector<double> lat(n), lon(n);
+        for (int i = 0; i < n; ++i) {
+            lat[i] = to_rad_geo(coord[i].first);
+            lon[i] = to_rad_geo(coord[i].second);
+        }
+        const double R = 6378.388;
+        for (int i = 0; i < n; ++i) {
+            for (int j = 0; j < n; ++j) {
+                if (i==j) { dist[i][j]=0; continue; }
+                double q1 = cos(lon[i]-lon[j]);
+                double dij = R * acos( sin(lat[i])*sin(lat[j]) + cos(lat[i])*cos(lat[j])*q1 );
+                dist[i][j] = floor(dij + 1.0);
             }
         }
-    } else if (edge_format == "UPPER_ROW" || edge_format == "UPPER_ROW.") {
-        // như cũ: tam giác trên (không gồm đường chéo)
-        for (int i = 0; i < n - 1; i++) {
-            for (int j = i + 1; j < n; j++) {
-                if (idx >= (int)values.size()) {
-                    cerr << "Dữ liệu không đủ cho UPPER_ROW\n";
-                    exit(1);
-                }
-                dist[i][j] = values[idx];
-                dist[j][i] = values[idx];
-                idx++;
-            }
-        }
-    } else if (edge_format == "FULL_MATRIX" || edge_format == "FULL_MATRIX.") {
-        // ma trận đầy đủ n*n
-        for (int i = 0; i < n; i++) {
-            for (int j = 0; j < n; j++) {
-                if (idx >= (int)values.size()) {
-                    cerr << "Dữ liệu không đủ cho FULL_MATRIX\n";
-                    exit(1);
-                }
-                dist[i][j] = values[idx++];
-            }
-        }
-    } else {
-        cerr << "EDGE_WEIGHT_FORMAT '" << edge_format << "' chưa được hỗ trợ.\n";
-        exit(1);
+        return;
     }
+
+    // nếu có EDGE_WEIGHT_SECTION (EXPLICIT hoặc các format ma trận tam giác)
+    if (edge_section_line != -1) {
+        // chuẩn hóa tên format
+        string fmt = edge_weight_format;
+        if (fmt.empty()) {
+            // một số file không khai báo; cố gắng đoán: nếu dòng sau có n*(n-1)/2 số -> UPPER_ROW/LOWER_ROW
+            // nhưng ở đây sẽ ưu tiên UPPER_ROW nếu không biết
+            fmt = "UPPER_ROW";
+        }
+        long need = 0;
+        if (fmt.find("FULL") != string::npos) need = 1L * n * n;
+        else if (fmt.find("LOWER_DIAG") != string::npos || fmt.find("LOWERDIAG") != string::npos) need = 1L * n * (n+1) / 2;
+        else if (fmt.find("UPPER_DIAG") != string::npos || fmt.find("UPPERDIAG") != string::npos) need = 1L * n * (n+1) / 2;
+        else if (fmt.find("LOWER_ROW") != string::npos || (fmt.find("LOWER")!=string::npos && fmt.find("ROW")!=string::npos)) need = 1L * n * (n-1) / 2;
+        else if (fmt.find("UPPER_ROW") != string::npos || (fmt.find("UPPER")!=string::npos && fmt.find("ROW")!=string::npos)) need = 1L * n * (n-1) / 2;
+        else {
+            // fallback: nếu EXPLICIT và không biết format, đọc đến hết file (an toàn nếu EDGE_SECTION là cuối file)
+            need = LONG_MAX;
+        }
+
+        vector<double> values;
+        // thu thập số từ dòng tiếp theo của EDGE_WEIGHT_SECTION
+        for (int i = edge_section_line + 1; i < L; ++i) {
+            // nếu gặp 1 section khác thì dừng
+            string U = up(lines[i]);
+            if (U.find("DISPLAY_DATA_SECTION")!=string::npos || U.find("NODE_COORD_SECTION")!=string::npos
+                || U.find("TOUR_SECTION")!=string::npos || U.find("EOF")!=string::npos) break;
+            stringstream ss(lines[i]);
+            double v;
+            while (ss >> v) {
+                values.push_back(v);
+                if ((long)values.size() == need) break;
+                // nếu need == LONG_MAX thì tiếp tục cho tới hết
+            }
+            if ((long)values.size() == need) break;
+        }
+
+        if (need != LONG_MAX && (long)values.size() < need) {
+            cerr << "Dữ liệu EDGE_WEIGHT_SECTION không đủ: cần " << need << " giá trị, có " << values.size() << "\n";
+            exit(1);
+        }
+
+        // điền vào ma trận dựa theo format
+        long idx = 0;
+        if (fmt.find("FULL") != string::npos) {
+            for (int i = 0; i < n; ++i)
+                for (int j = 0; j < n; ++j)
+                    dist[i][j] = values[idx++];
+        }
+        else if (fmt.find("UPPER_ROW") != string::npos) {
+            for (int i = 0; i < n-1; ++i)
+                for (int j = i+1; j < n; ++j) {
+                    dist[i][j] = values[idx];
+                    dist[j][i] = values[idx];
+                    idx++;
+                }
+        }
+        else if (fmt.find("LOWER_ROW") != string::npos) {
+            for (int j = 0; j < n-1; ++j)
+                for (int i = j+1; i < n; ++i) {
+                    dist[i][j] = values[idx];
+                    dist[j][i] = values[idx];
+                    idx++;
+                }
+        }
+        else if (fmt.find("UPPER_DIAG") != string::npos) {
+            for (int i = 0; i < n; ++i)
+                for (int j = i; j < n; ++j) {
+                    dist[i][j] = values[idx];
+                    dist[j][i] = values[idx];
+                    idx++;
+                }
+        }
+        else if (fmt.find("LOWER_DIAG") != string::npos) {
+            for (int i = 0; i < n; ++i)
+                for (int j = 0; j <= i; ++j) {
+                    dist[i][j] = values[idx];
+                    dist[j][i] = values[idx];
+                    idx++;
+                }
+        }
+        else {
+            // fallback: nếu không xác định, cố gắng điền theo UPPER_ROW
+            idx = 0;
+            for (int i = 0; i < n-1; ++i)
+                for (int j = i+1; j < n; ++j) {
+                    if (idx >= (int)values.size()) break;
+                    dist[i][j] = values[idx];
+                    dist[j][i] = values[idx];
+                    idx++;
+                }
+        }
+        return;
+    }
+
+    // Nếu không có các section trên, thử đọc các cặp tọa độ trong file (thường là DISPLAY_DATA_SECTION cuối file)
+    if (display_line != -1) {
+        int start = display_line + 1;
+        vector<pair<double,double>> coord(n, {0,0});
+        int idx = 0;
+        for (int i = start; i < L && idx < n; ++i) {
+            string s = trim(lines[i]);
+            if (s.empty()) continue;
+            stringstream ss(s);
+            int id; double x,y;
+            if (!(ss >> id >> x >> y)) {
+                vector<double> toks; double t; stringstream ss2(s);
+                while (ss2 >> t) toks.push_back(t);
+                if (toks.size() >= 2) { x = toks[toks.size()-2]; y = toks[toks.size()-1]; id = idx+1; }
+                else continue;
+            }
+            if (id>=1 && id<=n) coord[id-1] = {x,y};
+            else coord[idx] = {x,y};
+            idx++;
+        }
+        for (int i = 0; i < n; ++i) {
+            for (int j = 0; j < n; ++j) {
+                if (i==j) { dist[i][j]=0; continue; }
+                double dx = coord[i].first - coord[j].first;
+                double dy = coord[i].second - coord[j].second;
+                dist[i][j] = floor(sqrt(dx*dx + dy*dy) + 0.5);
+            }
+        }
+        return;
+    }
+
+    cerr << "Không tìm thấy dữ liệu tọa độ hoặc EDGE_WEIGHT_SECTION phù hợp trong file\n";
+    exit(1);
 }
 
 // -------------------- HÀM CHÍNH --------------------
-int main() {
+int main(char* argv[]) {
     int n;
     vector<vector<double>> dist;
 
-    string filename = "bayg29.tsp";
+    string filename = argv[1];
+    
+    cout << "Testing: " << filename << endl;
     read_tsp(filename, dist, n);
-
+    
     // ---- THAM SỐ TABU ----
-    const int MAX_ITER = 2000;
-    const int TABU_TENURE = 5;
-    const int MAX_NO_IMPROVE = 400;
+    const int MAX_ITER = 5000;
+    const int TABU_TENURE = 10;
+    const int MAX_NO_IMPROVE = 1000;
 
     // ---- KHỞI TẠO GREEDY ----
     vector<int> curTour = nearest_neighbor_init(n, dist);
     double curCost = tour_cost(curTour, dist);
     vector<int> bestTour = curTour;
     double bestCost = curCost;
-
     // ---- DANH SÁCH TABU ----
     vector<vector<int>> tabu2_0(n, vector<int>(n, 0));
     vector<vector<int>> tabu1_1(n, vector<int>(n, 0));
@@ -202,7 +390,7 @@ int main() {
                 bool isTabu = false;
                 int a, b;
                 if(useSwap){
-                    swap_two_cities(cand, i, k);
+                    move_two_cities(cand, i, k);
                     a = curTour[i];
                     b = curTour[i + 1];
                     isTabu = (tabu2_0[a][b] > 0) || (tabu2_0[b][a] > 0);
