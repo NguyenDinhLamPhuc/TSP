@@ -353,7 +353,13 @@ void read_tsp(const string &filename, vector<vector<double>> &dist, int &n) {
 }
 
 // -------------------- HÀM CHÍNH --------------------
-int main(char* argv[]) {
+int main(int argc, char* argv[]) {
+
+    if (argc < 2) {
+        cerr << "Usage: " << (argc > 0 ? argv[0] : "tabuTSP") << " <file.tsp>\n";
+        return 1;
+    }
+    
     int n;
     vector<vector<double>> dist;
 
