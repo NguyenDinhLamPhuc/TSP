@@ -36,16 +36,35 @@ vector<int> nearest_neighbor_init(int n, const vector<vector<double>> &dist, int
 }
 
 // -------------------- PHÉP BIẾN ĐỔI: DI CHUYỂN 2 THÀNH PHỐ --------------------
+// Di chuyển cặp (i, i+1) sang vị trí k (k là index trong *mảng gốc* trước khi xóa).
+// Trong hàm ta tính insert_pos trong mảng đã xóa 2 phần tử:
+//  - nếu k <= i: insert_pos = k
+//  - nếu k > i+1: insert_pos = k - 2
+// Chú ý: không cho phép k == i hoặc k == i+1 (chèn trùng/overlap).
 void move_two_cities(vector<int> &tour, int i, int k) {
-
-    if (k <= i && (i - k) <= 1) return;
-    if (k >= i && (k - i) <= 2) return;
     int n = tour.size();
+    if (n < 3) return;
+    if (i < 0 || i + 1 >= n) return; // i phải có i+1
+    if (k < 0 || k >= n) return; // k là index trong mảng ban đầu
+
+    // cấm chèn vào vùng overlap của chính nó
+    if (k == i || k == i + 1) return;
+
     int city1 = tour[i];
     int city2 = tour[i + 1];
-    tour.erase(tour.begin() + i, tour.begin() + i + 2);  // cắt 2 thành phố
-    if (k > i + 1) k -= 2; // điều chỉnh vị trí chèn sau khi xóa
-    tour.insert(tour.begin() + k + 1, {city1, city2});  // chèn lại
+
+    // remove two elements at i and i+1
+    tour.erase(tour.begin() + i, tour.begin() + i + 2); // size -> n-2
+
+    int insert_pos;
+    if (k <= i) insert_pos = k;
+    else insert_pos = k - 2; // đã xóa 2 phần tử trước vị trí k
+
+    if (insert_pos < 0) insert_pos = 0;
+    if (insert_pos > (int)tour.size()) insert_pos = tour.size();
+
+    vector<int> tmp = {city1, city2};
+    tour.insert(tour.begin() + insert_pos, tmp.begin(), tmp.end());
 }
 
 // -------------------- PHÉP BIẾN ĐỔI: ĐỔI CHỖ 2 THÀNH PHỐ --------------------
@@ -56,6 +75,7 @@ void swap_two_cities(vector<int> &tour, int i, int j) {
 }
 
 // -------------------- ĐỌC FILE .TSP --------------------
+// (Giữ nguyên hoàn toàn hàm read_tsp từ code gốc của bạn.)
 void read_tsp(const string &filename, vector<vector<double>> &dist, int &n) {
     ifstream fin(filename);
     if (!fin.is_open()) {
@@ -63,7 +83,6 @@ void read_tsp(const string &filename, vector<vector<double>> &dist, int &n) {
         exit(1);
     }
 
-    // đọc toàn bộ file vào vector dòng để xử lý linh hoạt các section
     vector<string> lines;
     string line;
     while (getline(fin, line)) lines.push_back(line);
@@ -77,7 +96,6 @@ void read_tsp(const string &filename, vector<vector<double>> &dist, int &n) {
         return s.substr(a, b-a+1);
     };
 
-    // header fields mặc định
     string edge_weight_type = "EXPLICIT";
     string edge_weight_format = "";
     string display_data_type = "";
@@ -123,7 +141,6 @@ void read_tsp(const string &filename, vector<vector<double>> &dist, int &n) {
     n = dimension;
     dist.assign(n, vector<double>(n, 0.0));
 
-    // helper: parse tokens (số) từ dòng d tới d + nhiều
     auto collect_numbers_from = [&](int start_line, long needed) {
         vector<double> vals;
         for (int i = start_line; i < L && (long)vals.size() < needed; ++i) {
@@ -137,10 +154,8 @@ void read_tsp(const string &filename, vector<vector<double>> &dist, int &n) {
         return vals;
     };
 
-    // nếu có NODE_COORD_SECTION hoặc DISPLAY_DATA_SECTION và EDGE_WEIGHT_TYPE == EUC_2D (hoặc kiểu tọa độ khác)
     if ((edge_weight_type.find("EUC_2D") != string::npos || edge_weight_type.find("EUC2D") != string::npos)
         && (nodecoord_line != -1 || display_line != -1)) {
-        // lấy tọa độ từ NODE_COORD_SECTION ưu tiên, nếu không có dùng DISPLAY_DATA_SECTION
         int start = (nodecoord_line != -1 ? nodecoord_line + 1 : display_line + 1);
         vector<pair<double,double>> coord(n, {0,0});
         int idx = 0;
@@ -151,7 +166,6 @@ void read_tsp(const string &filename, vector<vector<double>> &dist, int &n) {
             int id;
             double x, y;
             if (!(ss >> id >> x >> y)) {
-                // một số file dùng định dạng "index: x y" hoặc "index x y" - cố gắng bắt số cuối hai số
                 vector<double> toks;
                 double t;
                 stringstream ss2(s);
@@ -166,7 +180,6 @@ void read_tsp(const string &filename, vector<vector<double>> &dist, int &n) {
             else coord[idx] = {x,y};
             idx++;
         }
-        // tính khoảng cách Euclid (làm tròn theo TSPLIB)
         for (int i = 0; i < n; ++i) {
             for (int j = 0; j < n; ++j) {
                 if (i==j) { dist[i][j] = 0; continue; }
@@ -179,7 +192,6 @@ void read_tsp(const string &filename, vector<vector<double>> &dist, int &n) {
         return;
     }
 
-    // hỗ trợ GEO nếu có NODE_COORD_SECTION
     if (edge_weight_type.find("GEO") != string::npos && nodecoord_line != -1) {
         int start = nodecoord_line + 1;
         vector<pair<double,double>> coord(n, {0,0});
@@ -202,7 +214,6 @@ void read_tsp(const string &filename, vector<vector<double>> &dist, int &n) {
         auto to_rad_geo = [&](double v)->double{
             int deg = (int)floor(v);
             double min = v - deg;
-            // theo định nghĩa TSPLIB: chuyển minutes với factor 5/3 trước khi đổi sang rad
             return M_PI * (deg + 5.0 * min / 3.0) / 180.0;
         };
         vector<double> lat(n), lon(n);
@@ -222,30 +233,19 @@ void read_tsp(const string &filename, vector<vector<double>> &dist, int &n) {
         return;
     }
 
-    // nếu có EDGE_WEIGHT_SECTION (EXPLICIT hoặc các format ma trận tam giác)
     if (edge_section_line != -1) {
-        // chuẩn hóa tên format
         string fmt = edge_weight_format;
-        if (fmt.empty()) {
-            // một số file không khai báo; cố gắng đoán: nếu dòng sau có n*(n-1)/2 số -> UPPER_ROW/LOWER_ROW
-            // nhưng ở đây sẽ ưu tiên UPPER_ROW nếu không biết
-            fmt = "UPPER_ROW";
-        }
+        if (fmt.empty()) fmt = "UPPER_ROW";
         long need = 0;
         if (fmt.find("FULL") != string::npos) need = 1L * n * n;
         else if (fmt.find("LOWER_DIAG") != string::npos || fmt.find("LOWERDIAG") != string::npos) need = 1L * n * (n+1) / 2;
         else if (fmt.find("UPPER_DIAG") != string::npos || fmt.find("UPPERDIAG") != string::npos) need = 1L * n * (n+1) / 2;
         else if (fmt.find("LOWER_ROW") != string::npos || (fmt.find("LOWER")!=string::npos && fmt.find("ROW")!=string::npos)) need = 1L * n * (n-1) / 2;
         else if (fmt.find("UPPER_ROW") != string::npos || (fmt.find("UPPER")!=string::npos && fmt.find("ROW")!=string::npos)) need = 1L * n * (n-1) / 2;
-        else {
-            // fallback: nếu EXPLICIT và không biết format, đọc đến hết file (an toàn nếu EDGE_SECTION là cuối file)
-            need = LONG_MAX;
-        }
+        else need = LONG_MAX;
 
         vector<double> values;
-        // thu thập số từ dòng tiếp theo của EDGE_WEIGHT_SECTION
         for (int i = edge_section_line + 1; i < L; ++i) {
-            // nếu gặp 1 section khác thì dừng
             string U = up(lines[i]);
             if (U.find("DISPLAY_DATA_SECTION")!=string::npos || U.find("NODE_COORD_SECTION")!=string::npos
                 || U.find("TOUR_SECTION")!=string::npos || U.find("EOF")!=string::npos) break;
@@ -254,7 +254,6 @@ void read_tsp(const string &filename, vector<vector<double>> &dist, int &n) {
             while (ss >> v) {
                 values.push_back(v);
                 if ((long)values.size() == need) break;
-                // nếu need == LONG_MAX thì tiếp tục cho tới hết
             }
             if ((long)values.size() == need) break;
         }
@@ -264,7 +263,6 @@ void read_tsp(const string &filename, vector<vector<double>> &dist, int &n) {
             exit(1);
         }
 
-        // điền vào ma trận dựa theo format
         long idx = 0;
         if (fmt.find("FULL") != string::npos) {
             for (int i = 0; i < n; ++i)
@@ -304,7 +302,6 @@ void read_tsp(const string &filename, vector<vector<double>> &dist, int &n) {
                 }
         }
         else {
-            // fallback: nếu không xác định, cố gắng điền theo UPPER_ROW
             idx = 0;
             for (int i = 0; i < n-1; ++i)
                 for (int j = i+1; j < n; ++j) {
@@ -317,7 +314,6 @@ void read_tsp(const string &filename, vector<vector<double>> &dist, int &n) {
         return;
     }
 
-    // Nếu không có các section trên, thử đọc các cặp tọa độ trong file (thường là DISPLAY_DATA_SECTION cuối file)
     if (display_line != -1) {
         int start = display_line + 1;
         vector<pair<double,double>> coord(n, {0,0});
@@ -378,95 +374,118 @@ int main(int argc, char* argv[]) {
     double curCost = tour_cost(curTour, dist);
     vector<int> bestTour = curTour;
     double bestCost = curCost;
-    // ---- DANH SÁCH TABU ----
-    vector<vector<int>> tabu2_0(n, vector<int>(n, 0));
-    vector<vector<int>> tabu1_1(n, vector<int>(n, 0));
+
+    // ---- DANH SÁCH TABU (lưu theo city id) ----
+    vector<vector<int>> tabu_pair(n, vector<int>(n, 0));
+    vector<vector<int>> tabu_swap(n, vector<int>(n, 0));
+
     int iter = 0, noImprove = 0;
-    bool useSwap = false; // Chuyển đổi giữa 2 phép biến đổi
+    bool useSwap = false; // mỗi vòng while sẽ đổi operator (toàn bộ neighborhood)
 
     while (iter < MAX_ITER && noImprove < MAX_NO_IMPROVE) {
         iter++;
         double bestNeighborCost = 1e18;
-        int bestI = -1, bestK = -1, bak = -1;
         vector<int> bestNeighborTour;
+        int bestA = -1, bestB = -1; // city ids for tabu bookkeeping
+        enum MoveType { NONE, SWAP, MOVE_PAIR } bestType = NONE;
 
-        for (int i = 1; i < n; i++) {
-            for (int k = 1; k < n; k++) {
-                vector<int> cand = curTour;
-                bool isTabu = false;
-                int a, b;
-                if(useSwap){
-                    move_two_cities(cand, i, k);
-                    a = curTour[i];
-                    b = curTour[i + 1];
-                    isTabu = (tabu2_0[a][b] > 0) || (tabu2_0[b][a] > 0);
-                    useSwap = false;
-                }
-                else {
+        // --- nếu useSwap true: đánh giá tất cả swap neighbors ---
+        if (useSwap) {
+            for (int i = 1; i < n; ++i) {
+                for (int k = i+1; k < n; ++k) { // tránh lặp lại symmetric
+                    vector<int> cand = curTour;
                     swap_two_cities(cand, i, k);
-                    a = curTour[i];
-                    b = curTour[k];
-                    isTabu = (tabu1_1[a][b] > 0) || (tabu1_1[b][a] > 0);
-                    useSwap = true;
-                }
+                    double candCost = tour_cost(cand, dist);
 
-                double candCost = tour_cost(cand, dist);
-                bool improve = false;
+                    int a = curTour[i];
+                    int b = curTour[k];
+                    bool isTabu = (tabu_swap[a][b] > 0) || (tabu_swap[b][a] > 0);
 
+                    // aspiration: nếu cải thiện global best thì chấp nhận dù tabu
+                    if (isTabu && !(candCost < bestCost)) continue;
 
-                if (candCost < bestCost && candCost < bestNeighborCost) {
-                    bestNeighborCost = candCost;
-                    bestI = curTour[a];
-                    bestK = curTour[b];
-                    bestNeighborTour = cand;
-                    improve = true;
-                } else if (!improve) {
-                    if (!isTabu && candCost < bestNeighborCost) {
+                    if (candCost < bestNeighborCost) {
                         bestNeighborCost = candCost;
-                        bestI = curTour[a];
-                        bestK = curTour[b];
                         bestNeighborTour = cand;
+                        bestA = a; bestB = b;
+                        bestType = SWAP;
+                    }
+                }
+            }
+        } else { // --- đánh giá move_pair neighbors ---
+            // i từ 1..n-2 vì ta lấy cặp (i, i+1)
+            for (int i = 1; i <= n-2; ++i) {
+                for (int k = 1; k < n; ++k) {
+                    if (k == i || k == i+1) continue; // skip overlapping insert positions
+                    vector<int> cand = curTour;
+                    move_two_cities(cand, i, k);
+                    double candCost = tour_cost(cand, dist);
+
+                    int a = curTour[i];
+                    int b = curTour[i+1];
+                    bool isTabu = (tabu_pair[a][b] > 0) || (tabu_pair[b][a] > 0);
+
+                    if (isTabu && !(candCost < bestCost)) continue;
+
+                    if (candCost < bestNeighborCost) {
+                        bestNeighborCost = candCost;
+                        bestNeighborTour = cand;
+                        bestA = a; bestB = b;
+                        bestType = MOVE_PAIR;
                     }
                 }
             }
         }
 
-        if (bestI == -1) {
+        // nếu không tìm thấy neighbor tốt nào thì giảm tabu và dừng
+        if (bestType == NONE || bestNeighborTour.empty()) {
             for (int x = 0; x < n; x++)
                 for (int y = 0; y < n; y++){
-                    if (tabu2_0[x][y] > 0) tabu2_0[x][y]--;
-                    if (tabu1_1[x][y] > 0) tabu1_1[x][y]--;
+                    if (tabu_pair[x][y] > 0) tabu_pair[x][y]--;
+                    if (tabu_swap[x][y] > 0) tabu_swap[x][y]--;
                 }
             break;
         }
 
+        // apply chosen neighbor
         curTour = bestNeighborTour;
         curCost = bestNeighborCost;
-        if(useSwap){
-            tabu1_1[bestI][bestK] = TABU_TENURE;
-            tabu1_1[bestK][bestI] = TABU_TENURE;
-        }
-        else{
-            tabu2_0[bestI][bestK] = TABU_TENURE;
-            tabu2_0[bestK][bestI] = TABU_TENURE;
+
+        // update tabu list on city ids
+        if (bestType == SWAP) {
+            tabu_swap[bestA][bestB] = TABU_TENURE;
+            tabu_swap[bestB][bestA] = TABU_TENURE;
+        } else if (bestType == MOVE_PAIR) {
+            tabu_pair[bestA][bestB] = TABU_TENURE;
+            tabu_pair[bestB][bestA] = TABU_TENURE;
         }
 
+        // update global best
         if (curCost < bestCost) {
             bestCost = curCost;
             bestTour = curTour;
             noImprove = 0;
         } else noImprove++;
 
+        // decrement tabu tenures
         for (int x = 0; x < n; x++)
             for (int y = 0; y < n; y++){
-                if (tabu2_0[x][y] > 0) tabu2_0[x][y]--;
-                if (tabu1_1[x][y] > 0) tabu1_1[x][y]--;
+                if (tabu_pair[x][y] > 0) tabu_pair[x][y]--;
+                if (tabu_swap[x][y] > 0) tabu_swap[x][y]--;
             }
-        
+
+        // toggle neighborhood operator for next iteration
+        useSwap = !useSwap;
+
+        // nhỏ: in tiến trình mỗi 100 vòng để người dùng thấy chương trình đang chạy
+        if (iter % 100 == 0) {
+            cerr << "Iter=" << iter << " bestCost=" << bestCost << " noImprove=" << noImprove << "\n";
+        }
     }
 
     cout << fixed << setprecision(6);
     cout << "\nBest cost: " << bestCost << "\nBest tour:\n";
     for (int city : bestTour) cout << city << ' ';
     cout << "0\n";
+    return 0;
 }
