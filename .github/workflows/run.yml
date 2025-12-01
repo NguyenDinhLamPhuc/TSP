@@ -18,7 +18,7 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y g++
 
     - name: Compile code
-      run: g++ -O2 -std=c++17 main.cpp -o tabuTSP
+      run: g++ -O2 -std=c++17 tabuTSP.cpp -o tabuTSP
 
     - name: List test files
       run: ls -R testTSP
