@@ -37,15 +37,31 @@ vector<int> nearest_neighbor_init(int n, const vector<vector<double>> &dist, int
 
 // -------------------- PHÉP BIẾN ĐỔI: DI CHUYỂN 2 THÀNH PHỐ --------------------
 void move_two_cities(vector<int> &tour, int i, int k) {
-
-    if (k <= i && (i - k) <= 1) return;
-    if (k >= i && (k - i) <= 2) return;
     int n = tour.size();
+    if (n < 2) return;
+    if (i < 0 || i + 1 >= n) return;
+    if (k < 0 || k >= n) return;
+    if (k == i || k == i + 1) return;
+
     int city1 = tour[i];
     int city2 = tour[i + 1];
-    tour.erase(tour.begin() + i, tour.begin() + i + 2);  // cắt 2 thành phố
-    if (k > i + 1) k -= 2; // điều chỉnh vị trí chèn sau khi xóa
-    tour.insert(tour.begin() + k + 1, {city1, city2});  // chèn lại
+
+    // remove i and i+1
+    tour.erase(tour.begin() + i, tour.begin() + i + 2);
+
+    int insertPos = 0;
+    if (k < i) {
+        // indices before i unchanged
+        insertPos = k + 1;
+    } else { // k > i+1 (we excluded k == i and k == i+1 above)
+        // after erase, original index k shifts left by 2 => new index = k - 2
+        // we want to insert after original k => new insertPos = (k - 2) + 1 = k - 1
+        insertPos = k - 1;
+    }
+    if (insertPos < 0) insertPos = 0;
+    if (insertPos > (int)tour.size()) insertPos = tour.size();
+
+    tour.insert(tour.begin() + insertPos, {city1, city2});
 }
 
 // -------------------- PHÉP BIẾN ĐỔI: ĐỔI CHỖ 2 THÀNH PHỐ --------------------
@@ -151,7 +167,6 @@ void read_tsp(const string &filename, vector<vector<double>> &dist, int &n) {
             int id;
             double x, y;
             if (!(ss >> id >> x >> y)) {
-                // một số file dùng định dạng "index: x y" hoặc "index x y" - cố gắng bắt số cuối hai số
                 vector<double> toks;
                 double t;
                 stringstream ss2(s);
@@ -382,56 +397,61 @@ int main(int argc, char* argv[]) {
     vector<vector<int>> tabu2_0(n, vector<int>(n, 0));
     vector<vector<int>> tabu1_1(n, vector<int>(n, 0));
     int iter = 0, noImprove = 0;
-    bool useSwap = false; // Chuyển đổi giữa 2 phép biến đổi
 
     while (iter < MAX_ITER && noImprove < MAX_NO_IMPROVE) {
         iter++;
         double bestNeighborCost = 1e18;
-        int bestI = -1, bestK = -1, bak = -1;
+        int bestI = -1, bestK = -1;
+        bool bestIsSwap = false;
         vector<int> bestNeighborTour;
 
-        for (int i = 1; i < n; i++) {
-            for (int k = 1; k < n; k++) {
-                vector<int> cand = curTour;
-                bool isTabu = false;
-                int a, b;
-                if(useSwap){
-                    move_two_cities(cand, i, k);
-                    a = curTour[i];
-                    b = curTour[i + 1];
-                    isTabu = (tabu2_0[a][b] > 0) || (tabu2_0[b][a] > 0);
-                    useSwap = false;
-                }
-                else {
+        // i+1 must be valid for move_two; iterate i up to n-2
+        for (int i = 0; i + 1 < n; ++i) {
+            for (int k = 0; k < n; ++k) {
+                if (k == i) continue;
+
+                // try swap(i,k)
+                {
+                    vector<int> cand = curTour;
+                    int a = curTour[i];
+                    int b = curTour[k];
                     swap_two_cities(cand, i, k);
-                    a = curTour[i];
-                    b = curTour[k];
-                    isTabu = (tabu1_1[a][b] > 0) || (tabu1_1[b][a] > 0);
-                    useSwap = true;
+                    bool isTabu = (tabu1_1[a][b] > 0) || (tabu1_1[b][a] > 0);
+                    double candCost = tour_cost(cand, dist);
+                    bool aspiration = (candCost < bestCost);
+                    if ((aspiration || !isTabu) && candCost < bestNeighborCost) {
+                        bestNeighborCost = candCost;
+                        bestNeighborTour = cand;
+                        bestI = a;
+                        bestK = b;
+                        bestIsSwap = true;
+                    }
                 }
 
-                double candCost = tour_cost(cand, dist);
-                bool improve = false;
-
-
-                if (candCost < bestCost && candCost < bestNeighborCost) {
-                    bestNeighborCost = candCost;
-                    bestI = curTour[a];
-                    bestK = curTour[b];
-                    bestNeighborTour = cand;
-                    improve = true;
-                } else if (!improve) {
-                    if (!isTabu && candCost < bestNeighborCost) {
+                // try move_two(i,k) if k not i or i+1
+                if (k == i + 1) continue;
+                {
+                    vector<int> cand = curTour;
+                    int a = curTour[i];
+                    int b = curTour[i + 1];
+                    move_two_cities(cand, i, k);
+                    if ((int)cand.size() != n) continue; // skip if move_two didn't produce valid tour
+                    bool isTabu = (tabu2_0[a][b] > 0) || (tabu2_0[b][a] > 0);
+                    double candCost = tour_cost(cand, dist);
+                    bool aspiration = (candCost < bestCost);
+                    if ((aspiration || !isTabu) && candCost < bestNeighborCost) {
                         bestNeighborCost = candCost;
-                        bestI = curTour[a];
-                        bestK = curTour[b];
                         bestNeighborTour = cand;
+                        bestI = a;
+                        bestK = b;
+                        bestIsSwap = false;
                     }
                 }
             }
         }
 
         if (bestI == -1) {
+            // no valid neighbor found -> decrease tabu and break
             for (int x = 0; x < n; x++)
                 for (int y = 0; y < n; y++){
                     if (tabu2_0[x][y] > 0) tabu2_0[x][y]--;
@@ -442,11 +462,12 @@ int main(int argc, char* argv[]) {
 
         curTour = bestNeighborTour;
         curCost = bestNeighborCost;
-        if(useSwap){
+
+        // update tabu
+        if (bestIsSwap) {
             tabu1_1[bestI][bestK] = TABU_TENURE;
             tabu1_1[bestK][bestI] = TABU_TENURE;
-        }
-        else{
+        } else {
             tabu2_0[bestI][bestK] = TABU_TENURE;
             tabu2_0[bestK][bestI] = TABU_TENURE;
         }
@@ -457,16 +478,18 @@ int main(int argc, char* argv[]) {
             noImprove = 0;
         } else noImprove++;
 
+        // decrement tabu tenures
         for (int x = 0; x < n; x++)
             for (int y = 0; y < n; y++){
                 if (tabu2_0[x][y] > 0) tabu2_0[x][y]--;
                 if (tabu1_1[x][y] > 0) tabu1_1[x][y]--;
             }
-        
     }
 
     cout << fixed << setprecision(6);
     cout << "\nBest cost: " << bestCost << "\nBest tour:\n";
     for (int city : bestTour) cout << city << ' ';
-    cout << "0\n";
+    cout << "\n";
+
+    return 0;
 }
