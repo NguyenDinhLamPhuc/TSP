@@ -1,4 +1,5 @@
 #include <bits/stdc++.h>
+#include <random>
 using namespace std;
 
 // -------------------- HÀM TÍNH COST --------------------
@@ -351,6 +352,11 @@ void read_tsp(const string &filename, vector<vector<double>> &dist, int &n) {
 // -------------------- HÀM CHÍNH --------------------
 int main(int argc, char* argv[]) {
 
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> dist01(0, 1); // 0 hoặc 1
+
+
     if (argc < 2) {
         cerr << "Usage: " << (argc > 0 ? argv[0] : "tabuTSP") << " <file.tsp>\n";
         return 1;
@@ -380,7 +386,6 @@ int main(int argc, char* argv[]) {
     vector<vector<int>> tabu_swap(n, vector<int>(n, 0));
 
     int iter = 0, noImprove = 0;
-    bool useSwap = false; // mỗi vòng while sẽ đổi operator (toàn bộ neighborhood)
 
     while (iter < MAX_ITER && noImprove < MAX_NO_IMPROVE) {
         iter++;
@@ -388,8 +393,7 @@ int main(int argc, char* argv[]) {
         vector<int> bestNeighborTour;
         int bestA = -1, bestB = -1; // city ids for tabu bookkeeping
         enum MoveType { NONE, SWAP, MOVE_PAIR } bestType = NONE;
-
-        // --- nếu useSwap true: đánh giá tất cả swap neighbors ---
+        bool useSwap = dist01(gen);
         if (useSwap) {
             for (int i = 1; i < n; ++i) {
                 for (int k = i+1; k < n; ++k) { // tránh lặp lại symmetric
@@ -413,7 +417,6 @@ int main(int argc, char* argv[]) {
                 }
             }
         } else { // --- đánh giá move_pair neighbors ---
-            // i từ 1..n-2 vì ta lấy cặp (i, i+1)
             for (int i = 1; i <= n-2; ++i) {
                 for (int k = 1; k < n; ++k) {
                     if (k == i || k == i+1) continue; // skip overlapping insert positions
@@ -474,8 +477,6 @@ int main(int argc, char* argv[]) {
                 if (tabu_swap[x][y] > 0) tabu_swap[x][y]--;
             }
 
-        // toggle neighborhood operator for next iteration
-        useSwap = !useSwap;
 
         // nhỏ: in tiến trình mỗi 100 vòng để người dùng thấy chương trình đang chạy
         if (iter % 100 == 0) {
@@ -489,4 +490,3 @@ int main(int argc, char* argv[]) {
     cout << "0\n";
     return 0;
 }
-
