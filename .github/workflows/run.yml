@@ -1,67 +1,34 @@
-name: C/C++ CI - build & run .tsp
+name: Run Tabu TSP Tests
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:
+    branches: [ "main" ]
 
 jobs:
-  build-and-run:
+  build-run:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Install build essentials
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake
+    - name: Install g++
+      run: sudo apt-get update && sudo apt-get install -y g++
 
-      - name: Compile C++ (GCC) -> tabuTSP
-        run: |
-          set -e
-          echo "Found C++ files:"
-          find . -name "*.cpp" -print
-          g++ -std=c++17 -O2 -Wall -Wextra -pedantic -pipe $(find . -name "*.cpp") -o tabuTSP
+    - name: Compile code
+      run: g++ -O2 -std=c++17 main.cpp -o tabuTSP
 
-      - name: Prepare results directory
-        run: mkdir -p results
+    - name: List test files
+      run: ls -R testTSP
 
-      - name: Run tabuTSP on all .tsp files
-        # runs each .tsp through your program; captures stdout/stderr to results/<name>.out
-        run: |
-          set -e
-          found=0
-          while IFS= read -r -d '' f; do
-            found=1
-            out="results/$(basename "$f").out"
-            echo "=== Running: $f ===" > "$out"
-            # run with a reasonable timeout to avoid hanging jobs (120s per file)
-            if timeout 120s ./tabuTSP "$f" >> "$out" 2>&1; then
-              echo "Exit: $?" >> "$out"
-            else
-              echo "Run failed or timed out for $f (exit $?)" >> "$out"
-            fi
-          done < <(find . -type f -name "*.tsp" -print0)
-          if [ "$found" -eq 0 ]; then
-            echo "No .tsp files found in repository." > results/NO_TSP_FOUND.txt
-          fi
-
-      - name: Show sample of results
-        run: |
-          echo "Result files (first 20):"
-          ls -1 results | head -n 20 || true
-
-      - name: Upload build artifact (binary)
-        uses: actions/upload-artifact@v4
-        with:
-          name: tabuTSP-binary
-          path: tabuTSP
-
-      - name: Upload results artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tsp-results
-          path: results
+    - name: Run TSP tests
+      run: |
+        echo "Running TSP tests..."
+        for file in testTSP/*.tsp; do
+          echo "----------------------------------------"
+          echo "Testing $file"
+          ./tabuTSP "$file"
+          echo ""
+        done
