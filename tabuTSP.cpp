@@ -376,7 +376,14 @@ int main(int argc, char* argv[]) {
     const int MAX_NO_IMPROVE = 1000;
 
     // ---- KHỞI TẠO GREEDY ----
-    vector<int> curTour = nearest_neighbor_init(n, dist);
+    /*vector<int> curTour = nearest_neighbor_init(n, dist);
+    double curCost = tour_cost(curTour, dist);
+    vector<int> bestTour = curTour;
+    double bestCost = curCost;*/
+    vector<int> curTour(n);
+    curTour[0] = 0; 
+    for(int i = 1; i < n; i++) curTour[i] = i;
+    shuffle(curTour.begin() + 1, curTour.end(), gen);
     double curCost = tour_cost(curTour, dist);
     vector<int> bestTour = curTour;
     double bestCost = curCost;
