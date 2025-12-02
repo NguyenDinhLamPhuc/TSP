@@ -372,7 +372,7 @@ int main(int argc, char* argv[]) {
     
     // ---- THAM SỐ TABU ----
     const int MAX_ITER = 5000;
-    const int TABU_TENURE = 20;
+    const int TABU_TENURE = max(10, n/8);
     const int MAX_NO_IMPROVE = 2000;
 
     // ---- KHỞI TẠO GREEDY ----
@@ -497,4 +497,5 @@ int main(int argc, char* argv[]) {
     cout << "0\n";
     return 0;
 }
+
 
