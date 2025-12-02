@@ -373,7 +373,7 @@ int main(int argc, char* argv[]) {
     // ---- THAM SỐ TABU ----
     const int MAX_ITER = 5000;
     const int TABU_TENURE = 20;
-    const int MAX_NO_IMPROVE = 1000;
+    const int MAX_NO_IMPROVE = 2000;
 
     // ---- KHỞI TẠO GREEDY ----
     /*vector<int> curTour = nearest_neighbor_init(n, dist);
@@ -497,3 +497,4 @@ int main(int argc, char* argv[]) {
     cout << "0\n";
     return 0;
 }
+
