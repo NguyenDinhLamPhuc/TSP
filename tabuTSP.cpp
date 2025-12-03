@@ -489,7 +489,7 @@ int main(int argc, char* argv[]) {
 
 
         // nhỏ: in tiến trình mỗi 100 vòng để người dùng thấy chương trình đang chạy
-        if (iter % 100 == 0) {
+        if (iter % 1000 == 0) {
             cerr << "Iter=" << iter << " bestCost=" << bestCost << " noImprove=" << noImprove << "\n";
         }
     }
@@ -500,3 +500,4 @@ int main(int argc, char* argv[]) {
     cout << "0\n";
     return 0;
 }
+
