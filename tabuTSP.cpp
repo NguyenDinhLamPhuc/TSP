@@ -44,7 +44,6 @@ vector<int> nearest_neighbor_init(int n, const vector<vector<double>> &dist, int
 // Chú ý: không cho phép k == i hoặc k == i+1 (chèn trùng/overlap).
 void move_two_cities(vector<int> &tour, int i, int k) {
     int n = tour.size();
-    if (n < 3) return;
     if (i < 0 || i + 1 >= n) return; // i phải có i+1
     if (k < 0 || k >= n) return; // k là index trong mảng ban đầu
 
@@ -372,7 +371,7 @@ int main(int argc, char* argv[]) {
     
     // ---- THAM SỐ TABU ----
     const int MAX_ITER = 5000;
-    const int TABU_TENURE = max(10, n/8);
+    const int TABU_TENURE = max(10, n / 5); // số vòng tabu
     const int MAX_NO_IMPROVE = 2000;
 
     // ---- KHỞI TẠO GREEDY ----
@@ -380,6 +379,7 @@ int main(int argc, char* argv[]) {
     double curCost = tour_cost(curTour, dist);
     vector<int> bestTour = curTour;
     double bestCost = curCost;
+
     /*vector<int> curTour(n);
     curTour[0] = 0; 
     for(int i = 1; i < n; i++) curTour[i] = i;
@@ -403,7 +403,7 @@ int main(int argc, char* argv[]) {
         bool useSwap = dist01(gen);
         if (useSwap) {
             for (int i = 1; i < n; ++i) {
-                for (int k = i+1; k < n; ++k) { // tránh lặp lại symmetric
+                for (int k = i+1; k < n; ++k) { 
                     vector<int> cand = curTour;
                     swap_two_cities(cand, i, k);
                     double candCost = tour_cost(cand, dist);
@@ -426,7 +426,7 @@ int main(int argc, char* argv[]) {
         } else { // --- đánh giá move_pair neighbors ---
             for (int i = 1; i <= n-2; ++i) {
                 for (int k = 1; k < n; ++k) {
-                    if (k == i || k == i+1) continue; // skip overlapping insert positions
+                    if (k == i || k == i+1 || k == i-1) continue; // skip overlapping insert positions
                     vector<int> cand = curTour;
                     move_two_cities(cand, i, k);
                     double candCost = tour_cost(cand, dist);
@@ -497,6 +497,3 @@ int main(int argc, char* argv[]) {
     cout << "0\n";
     return 0;
 }
-
-
-
