@@ -370,7 +370,7 @@ int main(int argc, char* argv[]) {
     read_tsp(filename, dist, n);
     
     // ---- THAM SỐ TABU ----
-    const int MAX_ITER = 5000;
+    const int MAX_ITER = 10000;
     const int TABU_TENURE = max(10, n / 5); // số vòng tabu
     const int MAX_NO_IMPROVE = 2000;
 
@@ -497,3 +497,4 @@ int main(int argc, char* argv[]) {
     cout << "0\n";
     return 0;
 }
+
