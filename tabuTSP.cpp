@@ -48,7 +48,7 @@ void move_two_cities(vector<int> &tour, int i, int k) {
     if (k < 0 || k >= n) return; // k là index trong mảng ban đầu
 
     // cấm chèn vào vùng overlap của chính nó
-    if (k == i || k == i + 1) return;
+    if (k == i || k == i + 1 || k == i-1) return;
 
     int city1 = tour[i];
     int city2 = tour[i + 1];
@@ -57,11 +57,8 @@ void move_two_cities(vector<int> &tour, int i, int k) {
     tour.erase(tour.begin() + i, tour.begin() + i + 2); // size -> n-2
 
     int insert_pos;
-    if (k <= i) insert_pos = k;
-    else insert_pos = k - 2; // đã xóa 2 phần tử trước vị trí k
-
-    if (insert_pos < 0) insert_pos = 0;
-    if (insert_pos > (int)tour.size()) insert_pos = tour.size();
+    if (k < i) insert_pos = k+1;
+    else insert_pos = k - 1; // đã xóa 2 phần tử trước vị trí k
 
     vector<int> tmp = {city1, city2};
     tour.insert(tour.begin() + insert_pos, tmp.begin(), tmp.end());
@@ -370,27 +367,28 @@ int main(int argc, char* argv[]) {
     read_tsp(filename, dist, n);
     
     // ---- THAM SỐ TABU ----
-    const int MAX_ITER = 10000;
+    const int MAX_ITER = 20000;
     const int TABU_TENURE = max(10, n / 5); // số vòng tabu
-    const int MAX_NO_IMPROVE = 2000;
+    const int MAX_NO_IMPROVE = 4000;
 
     // ---- KHỞI TẠO GREEDY ----
-    vector<int> curTour = nearest_neighbor_init(n, dist);
+    /*vector<int> curTour = nearest_neighbor_init(n, dist);
     double curCost = tour_cost(curTour, dist);
     vector<int> bestTour = curTour;
-    double bestCost = curCost;
+    double bestCost = curCost;*/
 
-    /*vector<int> curTour(n);
+    vector<int> curTour(n);
     curTour[0] = 0; 
     for(int i = 1; i < n; i++) curTour[i] = i;
     shuffle(curTour.begin() + 1, curTour.end(), gen);
     double curCost = tour_cost(curTour, dist);
     vector<int> bestTour = curTour;
-    double bestCost = curCost;*/
+    double bestCost = curCost;
 
     // ---- DANH SÁCH TABU (lưu theo city id) ----
     vector<vector<int>> tabu_pair(n, vector<int>(n, 0));
     vector<vector<int>> tabu_swap(n, vector<int>(n, 0));
+    vector<int> tabu_move(n, 0); // tabu cho move
 
     int iter = 0, noImprove = 0;
 
@@ -398,7 +396,7 @@ int main(int argc, char* argv[]) {
         iter++;
         double bestNeighborCost = 1e18;
         vector<int> bestNeighborTour;
-        int bestA = -1, bestB = -1; // city ids for tabu bookkeeping
+        int bestA = -1, bestB = -1, bestC = -1; // city ids for tabu bookkeeping
         enum MoveType { NONE, SWAP, MOVE_PAIR } bestType = NONE;
         bool useSwap = dist01(gen);
         if (useSwap) {
@@ -425,7 +423,7 @@ int main(int argc, char* argv[]) {
             }
         } else { // --- đánh giá move_pair neighbors ---
             for (int i = 1; i <= n-2; ++i) {
-                for (int k = 1; k < n; ++k) {
+                for (int k = 0; k < n; ++k) {
                     if (k == i || k == i+1 || k == i-1) continue; // skip overlapping insert positions
                     vector<int> cand = curTour;
                     move_two_cities(cand, i, k);
@@ -433,14 +431,15 @@ int main(int argc, char* argv[]) {
 
                     int a = curTour[i];
                     int b = curTour[i+1];
-                    bool isTabu = (tabu_pair[a][b] > 0) || (tabu_pair[b][a] > 0);
+                    int c = curTour[k];
+                    bool isTabu = (tabu_pair[a][b] > 0) || (tabu_move[c] > 0);
 
                     if (isTabu && !(candCost < bestCost)) continue;
 
                     if (candCost < bestNeighborCost) {
                         bestNeighborCost = candCost;
                         bestNeighborTour = cand;
-                        bestA = a; bestB = b;
+                        bestA = a; bestB = b; bestC = c;
                         bestType = MOVE_PAIR;
                     }
                 }
@@ -449,11 +448,13 @@ int main(int argc, char* argv[]) {
 
         // nếu không tìm thấy neighbor tốt nào thì giảm tabu và dừng
         if (bestType == NONE || bestNeighborTour.empty()) {
-            for (int x = 0; x < n; x++)
+            for (int x = 0; x < n; x++){
+                if (tabu_move[x] > 0) tabu_move[x]--;
                 for (int y = 0; y < n; y++){
                     if (tabu_pair[x][y] > 0) tabu_pair[x][y]--;
                     if (tabu_swap[x][y] > 0) tabu_swap[x][y]--;
                 }
+            }    
             break;
         }
 
@@ -467,7 +468,7 @@ int main(int argc, char* argv[]) {
             tabu_swap[bestB][bestA] = TABU_TENURE;
         } else if (bestType == MOVE_PAIR) {
             tabu_pair[bestA][bestB] = TABU_TENURE;
-            tabu_pair[bestB][bestA] = TABU_TENURE;
+            tabu_move[bestC] = TABU_TENURE;
         }
 
         // update global best
@@ -478,11 +479,13 @@ int main(int argc, char* argv[]) {
         } else noImprove++;
 
         // decrement tabu tenures
-        for (int x = 0; x < n; x++)
+        for (int x = 0; x < n; x++){
+            if (tabu_move[x] > 0) tabu_move[x]--;
             for (int y = 0; y < n; y++){
                 if (tabu_pair[x][y] > 0) tabu_pair[x][y]--;
                 if (tabu_swap[x][y] > 0) tabu_swap[x][y]--;
             }
+        }
 
 
         // nhỏ: in tiến trình mỗi 100 vòng để người dùng thấy chương trình đang chạy
@@ -497,4 +500,3 @@ int main(int argc, char* argv[]) {
     cout << "0\n";
     return 0;
 }
-
