@@ -15,21 +15,36 @@ double tour_cost(const vector<int> &tour, const vector<vector<double>> &dist) {
 double swap_cost(const vector<int> &tour, const vector<vector<double>> &dist,const double tourCost , int i, int k) {
     double s = tourCost;
     int n = tour.size();
-    s = s - dist[tour[i]][tour[i - 1]] - dist[tour[i]][tour[(i + 1)%n]]
+    if (i == k - 1){
+        s = s - dist[tour[i]][tour[i - 1]]
+              - dist[tour[k]][tour[(k + 1)%n]]
+              + dist[tour[k]][tour[i - 1]]
+              + dist[tour[i]][tour[(k + 1)%n]];
+    }
+    else{
+        s = s - dist[tour[i]][tour[i - 1]] - dist[tour[i]][tour[(i + 1)%n]]
           - dist[tour[k]][tour[k - 1]] - dist[tour[k]][tour[(k + 1)%n]]
           + dist[tour[k]][tour[i - 1]] + dist[tour[k]][tour[(i + 1)%n]]
           + dist[tour[i]][tour[k - 1]] + dist[tour[i]][tour[(k + 1)%n]];
-    
+    }
     return s;
 }
 
 double move_cost(const vector<int> &tour, const vector<vector<double>> &dist, const double tourCost, int i, int k) {
     double s = tourCost;
     int n = tour.size();
+    if( k == i + 2){
     s = s - dist[tour[i]][tour[i - 1]] - dist[tour[(i+1)%n]][tour[(i + 2)%n]]
           - dist[tour[k]][tour[(k + 1)%n]]
-          + dist[tour[k]][tour[i]] + dist[tour[i+1]][tour[(k + 1)%n]]
+          + dist[tour[k]][tour[i]] + dist[tour[(i+1)%n]][tour[(k + 1)%n]]
           + dist[tour[i-1]][tour[(i + 2)%n]];
+    }
+    else{
+    s = s - dist[tour[i]][tour[i - 1]] - dist[tour[(i + 1)%n]][tour[(i + 2)%n]]
+          - dist[tour[k]][tour[k + 1]]
+          + dist[tour[k]][tour[i - 1]] + dist[tour[i + 1]][tour[k - 1]]
+          + dist[tour[i]][tour[(i + 2)%n]];
+    }
     return s;
 }
 // -------------------- KHỞI TẠO GREEDY --------------------
