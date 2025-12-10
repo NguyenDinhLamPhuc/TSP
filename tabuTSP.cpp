@@ -12,7 +12,7 @@ double tour_cost(const vector<int> &tour, const vector<vector<double>> &dist) {
     return s;
 }
 
-double swap_cost(const vector<int> &tour, const vector<vector<double>> &dist,const double tourCost , int i, int k) {
+/*double swap_cost(const vector<int> &tour, const vector<vector<double>> &dist,const double tourCost , int i, int k) {
     double s = tourCost;
     int n = tour.size();
     if (i == k - 1){
@@ -28,25 +28,98 @@ double swap_cost(const vector<int> &tour, const vector<vector<double>> &dist,con
           + dist[tour[i]][tour[k - 1]] + dist[tour[i]][tour[(k + 1)%n]];
     }
     return s;
+}*/
+double swap_cost(const vector<int> &tour,
+                 const vector<vector<double>> &dist,
+                 double tourCost, int i, int k)
+{
+    int n = tour.size();
+    if (i == k) return tourCost;
+    if (i > k) std::swap(i, k);
+
+    int im1 = (i - 1 + n) % n;
+    int ip1 = (i + 1) % n;
+    int km1 = (k - 1 + n) % n;
+    int kp1 = (k + 1) % n;
+
+    double delta = 0.0;
+
+    if (k == i + 1) {
+        // adjacent
+        // remove: im1-i, i-k, k-kp1
+        // add: im1-k, k-i, i-kp1
+        delta -= dist[tour[im1]][tour[i]];
+        delta -= dist[tour[k]][tour[kp1]];
+
+        delta += dist[tour[im1]][tour[k]];
+        delta += dist[tour[i]][tour[kp1]];
+    } else {
+        // non-adjacent
+        // remove: im1-i, i-ip1, km1-k, k-kp1
+        // add: im1-k, k-ip1, km1-i, i-kp1
+        delta -= dist[tour[im1]][tour[i]];
+        delta -= dist[tour[i]][tour[ip1]];
+        delta -= dist[tour[km1]][tour[k]];
+        delta -= dist[tour[k]][tour[kp1]];
+
+        delta += dist[tour[im1]][tour[k]];
+        delta += dist[tour[k]][tour[ip1]];
+        delta += dist[tour[km1]][tour[i]];
+        delta += dist[tour[i]][tour[kp1]];
+    }
+
+    return tourCost + delta;
 }
 
-double move_cost(const vector<int> &tour, const vector<vector<double>> &dist, const double tourCost, int i, int k) {
+
+/*double move_cost(const vector<int> &tour, const vector<vector<double>> &dist, const double tourCost, int i, int k) {
     double s = tourCost;
     int n = tour.size();
-    if( k == i + 2){
-    s = s - dist[tour[i]][tour[i - 1]] - dist[tour[(i+1)%n]][tour[(i + 2)%n]]
+    s = s - dist[tour[i]][tour[i - 1]]
+          - dist[tour[(i+1)%n]][tour[(i + 2)%n]]
           - dist[tour[k]][tour[(k + 1)%n]]
-          + dist[tour[k]][tour[i]] + dist[tour[(i+1)%n]][tour[(k + 1)%n]]
+          + dist[tour[k]][tour[i]] 
+          + dist[tour[(i+1)%n]][tour[(k + 1)%n]]
           + dist[tour[i-1]][tour[(i + 2)%n]];
-    }
-    else{
-    s = s - dist[tour[i]][tour[i - 1]] - dist[tour[(i + 1)%n]][tour[(i + 2)%n]]
-          - dist[tour[k]][tour[k + 1]]
-          + dist[tour[k]][tour[i - 1]] + dist[tour[i + 1]][tour[k - 1]]
-          + dist[tour[i]][tour[(i + 2)%n]];
-    }
     return s;
+}*/
+double move_cost(const vector<int> &tour,
+                      const vector<vector<double>> &dist,
+                      double tourCost, int i, int k)
+{
+    int n = tour.size();
+    // invalid / overlap checks should be done by caller
+    if (i < 0 || i+1 >= n) return tourCost;
+    if (k < 0 || k >= n) return tourCost;
+    // prevent moving into its own neighborhood is caller's job
+
+    int im1 = (i - 1 + n) % n;
+    int i2 = (i + 1) % n;        // index of Y (i+1)
+    int i2p1 = (i + 2) % n;      // next after Y
+    int k1 = (k + 1) % n;
+
+    int X = tour[i];
+    int Y = tour[i2];
+    int prevX = tour[im1];
+    int nextY = tour[i2p1];
+    int Z = tour[k];
+    int succZ = tour[k1];
+
+    // If k is inside the segment [i, i+1] or equals i or i+1, caller must skip.
+    // Delta calculation:
+    double removed = 0.0, added = 0.0;
+
+    removed += dist[prevX][X];
+    removed += dist[Y][nextY];
+    removed += dist[Z][succZ];
+
+    added += dist[prevX][nextY];
+    added += dist[Z][X];
+    added += dist[Y][succZ];
+
+    return tourCost - removed + added;
 }
+
 // -------------------- KHỞI TẠO GREEDY --------------------
 vector<int> nearest_neighbor_init(int n, const vector<vector<double>> &dist, int start = 0) {
     vector<int> tour;
