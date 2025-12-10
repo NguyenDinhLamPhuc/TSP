@@ -1,0 +1,35 @@
+name: 4 Parallel Workers for TSP
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  run-tabu:
+    runs-on: ubuntu-latest
+
+    # Tạo 4 luồng song song
+    strategy:
+      matrix:
+        worker: [1, 2, 3, 4]   # 4 luồng độc lập
+      fail-fast: false
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install g++
+      run: sudo apt-get update && sudo apt-get install -y g++
+
+    - name: Compile TSP Solver
+      run: g++ -O2 -std=c++17 main.cpp -o tabuTSP
+
+    - name: Run all TSP files
+      run: |
+        echo "===== Worker ${{ matrix.worker }} running all TSP files ====="
+        for file in testTSP/*.tsp; do
+          echo "-------------------------------------------"
+          echo "Worker ${{ matrix.worker }} solving: $file"
+          ./tabuTSP "$file"
+          echo ""
+        done
