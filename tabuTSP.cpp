@@ -12,6 +12,26 @@ double tour_cost(const vector<int> &tour, const vector<vector<double>> &dist) {
     return s;
 }
 
+double swap_cost(const vector<int> &tour, const vector<vector<double>> &dist,const double tourCost , int i, int k) {
+    double s = tourCost;
+    int n = tour.size();
+    s = s - dist[tour[i]][tour[i - 1]] - dist[tour[i]][tour[i + 1]%n]
+          - dist[tour[k]][tour[k - 1]] - dist[tour[k]][tour[k + 1]%n]
+          + dist[tour[k]][tour[i - 1]] + dist[tour[k]][tour[i + 1]%n]
+          + dist[tour[i]][tour[k - 1]] + dist[tour[i]][tour[k + 1]%n];
+    
+    return s;
+}
+
+double move_cost(const vector<int> &tour, const vector<vector<double>> &dist, const double tourCost, int i, int k) {
+    double s = tourCost;
+    int n = tour.size();
+    s = s - dist[tour[i]][tour[i - 1]] - dist[tour[i+1]%n][tour[i + 2]%n]
+          - dist[tour[k]][tour[k + 1]%n]
+          + dist[tour[k]][tour[i]] + dist[tour[i+1]][tour[k + 1]%n]
+          + dist[tour[i-1]][tour[i + 2]%n];
+    return s;
+}
 // -------------------- KHỞI TẠO GREEDY --------------------
 vector<int> nearest_neighbor_init(int n, const vector<vector<double>> &dist, int start = 0) {
     vector<int> tour;
@@ -404,7 +424,7 @@ int main(int argc, char* argv[]) {
                 for (int k = i+1; k < n; ++k) { 
                     vector<int> cand = curTour;
                     swap_two_cities(cand, i, k);
-                    double candCost = tour_cost(cand, dist);
+                    double candCost = swap_cost(curTour, dist, curCost, i, k);
 
                     int a = curTour[i];
                     int b = curTour[k];
@@ -427,7 +447,7 @@ int main(int argc, char* argv[]) {
                     if (k == i || k == i+1 || k == i-1) continue; // skip overlapping insert positions
                     vector<int> cand = curTour;
                     move_two_cities(cand, i, k);
-                    double candCost = tour_cost(cand, dist);
+                    double candCost = move_cost(curTour, dist, curCost, i, k);
 
                     int a = curTour[i];
                     int b = curTour[i+1];
@@ -500,4 +520,3 @@ int main(int argc, char* argv[]) {
     cout << "0\n";
     return 0;
 }
-
